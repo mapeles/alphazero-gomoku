@@ -7,6 +7,10 @@ Training Loss Curve over 22 Iterations, last for 4 days on a single RTX 3090 Ti:
 ![loss_curve](assets/wandb.png)
 > MCTS simulations=2000, cpuct=4.0
 
+TODOs:
+- [ ] Refactor this project and improve code quality to serve as nano alphazero
+- [ ] ...
+
 ## Key Features
 - Complete AlphaZero algorithm implementation with MCTS and policy-value network
 - Self-play training with experience replay buffer
