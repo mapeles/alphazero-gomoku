@@ -239,8 +239,15 @@ class NNetWrapper:
         self.action_size = game.getActionSize()
         self.args = args
 
-        if args.cuda:
+        # Device selection: CUDA > MPS > CPU
+        if args.cuda and torch.cuda.is_available():
+            self.device = torch.device('cuda')
             self.nnet.cuda()
+        elif getattr(args, 'mps', False) and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            self.device = torch.device('mps')
+            self.nnet.to(self.device)
+        else:
+            self.device = torch.device('cpu')
         
         # Initialize optimizer
         self.optimizer = optim.Adam(self.nnet.parameters(), lr=args.max_lr)
@@ -294,8 +301,10 @@ class NNetWrapper:
                 target_pis = torch.FloatTensor(np.array(pis))
                 target_vs = torch.FloatTensor(np.array(vs).astype(np.float32))
 
-                if self.args.cuda:
-                    boards, target_pis, target_vs = boards.cuda(), target_pis.cuda(), target_vs.cuda()
+                # Move to device (CUDA, MPS, or CPU)
+                boards = boards.to(self.device)
+                target_pis = target_pis.to(self.device)
+                target_vs = target_vs.to(self.device)
 
                 # compute output
                 out_pi, out_v = self.nnet(boards)
@@ -336,8 +345,7 @@ class NNetWrapper:
 
         # preparing input
         board = torch.FloatTensor(board.astype(np.float32))
-        if self.args.cuda:
-            board = board.cuda()
+        board = board.to(self.device)
         board = board.view(1, self.board_x, self.board_y)
         self.nnet.eval()
         with torch.no_grad():
@@ -375,7 +383,7 @@ class NNetWrapper:
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
             raise ValueError("No model in path {}".format(filepath))
-        map_location = None if self.args.cuda else "cpu"
+        map_location = self.device
         checkpoint = torch.load(filepath, map_location=map_location, weights_only=True)
         self.nnet.load_state_dict(checkpoint["state_dict"])
 
@@ -548,6 +556,7 @@ def load_config(config_path):
     
     # System params
     args.cuda = config['system']['cuda'] and torch.cuda.is_available()
+    args.mps = config['system'].get('mps', False) and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
     args.checkpoint = config['system']['checkpoint_dir']
     args.load_model = config['system']['load_model']
     args.load_folder_file = tuple(config['system']['load_folder_file'])
@@ -584,6 +593,9 @@ def print_config(args):
     
     print("\nSystem Parameters:")
     print(f"  CUDA Enabled: {args.cuda}")
+    print(f"  MPS Enabled: {getattr(args, 'mps', False)}")
+    device = 'cuda' if args.cuda else ('mps' if getattr(args, 'mps', False) else 'cpu')
+    print(f"  Device: {device}")
     print(f"  Checkpoint Directory: {args.checkpoint}")
     print(f"  Load Model: {args.load_model}")
     print(f"  Load Path: {args.load_folder_file}")
